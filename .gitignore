@@ -8,3 +8,6 @@ Makefile
 
 # Shanbo added:
 .cache/clangd
+build-*/
+stamps/
+*.log

@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 
+set -eo pipefail
+
 TARGET_PREFIX=$(realpath ~/riscv)
 
 INTERACTIVE=1
+CLEAN=0
+BOOT_BOARD=0
+BUILD_EXAMPLE=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --prefix)
@@ -13,9 +18,22 @@ while [[ $# -gt 0 ]]; do
             DESTINATION=$(realpath "$2")
             shift 2
             ;;
+        # --clean)
+        #     CLEAN=1
+        #     shift
+        #     ;;
         --no-interactive)
             INTERACTIVE=0
             shift
+            ;;
+        --build-example)
+            BUILD_EXAMPLE=1
+            shift
+            ;;
+        --boot-board)
+            BOOT_BOARD=1
+            ESP_DIR=$(realpath "$2")
+            shift 2
             ;;
         *)
             echo "Unknown option: $1"
@@ -24,7 +42,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-RISCV_GNU_TOOLCHAIN_ROOT=$(printenv RISCV_GNU_TOOLCHAIN_ROOT)
+RISCV_GNU_TOOLCHAIN_ROOT=$(printenv RISCV_GNU_TOOLCHAIN_ROOT 2>/dev/null || true)
 if [ -z "$RISCV_GNU_TOOLCHAIN_ROOT" ]; then
     RISCV_GNU_TOOLCHAIN_ROOT=$(pwd)
 fi
@@ -32,6 +50,8 @@ fi
 RISCV_GNU_TOOLCHAIN_ROOT=$(realpath $RISCV_GNU_TOOLCHAIN_ROOT)
 GLIBC_BUILD_DIR="$RISCV_GNU_TOOLCHAIN_ROOT/build-glibc-linux-rv64imafdc-lp64d"
 CONFIGURE_SCRIPT="$RISCV_GNU_TOOLCHAIN_ROOT/riscv-glibc/configure"
+
+PWD=$(pwd)
 
 export PATH="$TARGET_PREFIX/bin:$PATH"
 
@@ -65,6 +85,33 @@ build_target() {
     make -C $RISCV_GNU_TOOLCHAIN_ROOT/riscv-glibc/$target subdir=$target ..=../ install_root=$TARGET_PREFIX/sysroot objdir="$GLIBC_BUILD_DIR" subdir_install
 }
 
+# clean_target() {
+#     local target="$1"
+
+#     make -C $RISCV_GNU_TOOLCHAIN_ROOT/riscv-glibc/$target subdir=$target ..=../ install_root=$TARGET_PREFIX/sysroot objdir="$GLIBC_BUILD_DIR" clean
+# }
+
+# if [ $CLEAN -eq 1 ]; then
+#     clean_target "nptl"
+# fi
+
+# build_target "malloc"
 build_target "nptl"
 
-cp "$GLIBC_BUILD_DIR"/nptl/libpthread.so "$DESTINATION"
+cp "$GLIBC_BUILD_DIR"/nptl/libpthread.so "$DESTINATION"/lib/libpthread-2.26.so
+# cp "$GLIBC_BUILD_DIR"/libc.so "$DESTINATION"/lib/libc-2.26.so
+
+if [ $BOOT_BOARD -eq 1 ]; then
+    cd $ESP_DIR
+    source /scratch/shanboz2/spandex_env_global
+
+    if [ $BUILD_EXAMPLE -eq 1 ]; then
+        cd soft/ariane/virtual-acc-app/examples/04_fcnn_mt_pthread
+        make clean && make -j `nproc`
+        cd $ESP_DIR
+    fi
+
+    cd socs/xilinx-vcu118-xcvu9p-gemm_sm-backup
+    make linux -j `nproc` && make fpga-program fpga-run-linux
+    cd $PWD
+fi
