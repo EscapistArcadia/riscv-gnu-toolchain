@@ -14,10 +14,10 @@ while [[ $# -gt 0 ]]; do
             TARGET_PREFIX=$(realpath "$2")
             shift 2
             ;;
-        --dest)
-            DESTINATION=$(realpath "$2")
-            shift 2
-            ;;
+        # --dest)
+        #     DESTINATION=$(realpath "$2")
+        #     shift 2
+        #     ;;
         # --clean)
         #     CLEAN=1
         #     shift
@@ -28,12 +28,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --build-example)
             BUILD_EXAMPLE=1
-            shift
+            EXAMPLE=$2
+            shift 2
             ;;
         --boot-board)
             BOOT_BOARD=1
             ESP_DIR=$(realpath "$2")
-            shift 2
+            ESP_CONFIG=$3
+            shift 3
             ;;
         *)
             echo "Unknown option: $1"
@@ -98,7 +100,8 @@ build_target() {
 # build_target "malloc"
 build_target "nptl"
 
-cp "$GLIBC_BUILD_DIR"/nptl/libpthread.so "$DESTINATION"/lib/libpthread-2.26.so
+cp "$GLIBC_BUILD_DIR"/nptl/libpthread.so ${ESP_DIR}/socs/${ESP_CONFIG}/soft-build/ariane/sysroot/lib/libpthread-2.26.so
+echo "cp $GLIBC_BUILD_DIR/nptl/libpthread.so ${ESP_DIR}/socs/${ESP_CONFIG}/soft-build/ariane/sysroot/lib/libpthread-2.26.so"
 # cp "$GLIBC_BUILD_DIR"/libc.so "$DESTINATION"/lib/libc-2.26.so
 
 if [ $BOOT_BOARD -eq 1 ]; then
@@ -106,12 +109,15 @@ if [ $BOOT_BOARD -eq 1 ]; then
     source /scratch/shanboz2/spandex_env_global
 
     if [ $BUILD_EXAMPLE -eq 1 ]; then
-        cd soft/ariane/virtual-acc-app/examples/04_fcnn_mt_pthread
-        make clean && make -j `nproc`
+        cd soft/ariane/virtual-acc-app/examples/$EXAMPLE
+        sed -i "66c ESP_EXE_DIR = $\(ESP_ROOT\)/socs/$ESP_CONFIG/soft-build/ariane/sysroot/applications/test" ../../Makefile
+        make clean > /dev/null 2>&1
+        make -j `nproc` > /dev/null 2>&1
         cd $ESP_DIR
     fi
 
-    cd socs/xilinx-vcu118-xcvu9p-gemm_sm-backup
-    make linux -j `nproc` && make fpga-program fpga-run-linux
+    cd socs/$ESP_CONFIG
+    make linux -j `nproc` > /dev/null 2>&1
+    make fpga-program fpga-run-linux
     cd $PWD
 fi
