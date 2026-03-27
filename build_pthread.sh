@@ -28,8 +28,11 @@ while [[ $# -gt 0 ]]; do
             ;;
         --build-example)
             BUILD_EXAMPLE=1
-            EXAMPLE=$2
-            shift 2
+            shift
+            while [[ $# -gt 0 && "$1" != "--" ]]; do
+                EXAMPLE+=("$1")
+                shift
+            done
             ;;
         --boot-board)
             BOOT_BOARD=1
@@ -109,11 +112,23 @@ if [ $BOOT_BOARD -eq 1 ]; then
     source /scratch/shanboz2/spandex_env_global
 
     if [ $BUILD_EXAMPLE -eq 1 ]; then
-        cd soft/ariane/virtual-acc-app/examples/$EXAMPLE
-        sed -i "66c ESP_EXE_DIR = $\(ESP_ROOT\)/socs/$ESP_CONFIG/soft-build/ariane/sysroot/applications/test" ../../Makefile
-        make clean > /dev/null 2>&1
-        make -j `nproc` > /dev/null 2>&1
-        cd $ESP_DIR
+        for example in "${EXAMPLE[@]}"; do
+            for d in $(ls -d $ESP_DIR/soft/ariane/virtual-acc-app/examples/*/); do
+                if [[ "$d" == *"$example"* ]]; then
+                    FULL_EXAMPLE+=("$d")
+                    break
+                fi
+            done
+        done
+
+        for example in "${FULL_EXAMPLE[@]}"; do
+            echo "Building example: $example"
+            cd $example
+            sed -i "66c ESP_EXE_DIR = $\(ESP_ROOT\)/socs/$ESP_CONFIG/soft-build/ariane/sysroot/applications/test" ../../Makefile
+            make clean > /dev/null
+            make -j `nproc` > /dev/null
+            cd $ESP_DIR
+        done
     fi
 
     cd socs/$ESP_CONFIG
